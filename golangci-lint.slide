@@ -1,0 +1,176 @@
+Golangci-lint: Lessons learnt from running at scale(-ish)
+
+Romanos Skiadas
+Software Engineer, Arista Networks
+
+* This talk
+
+- A quick case for linting
+- Quick intro to golangci-lint
+- Lessons learned:
+-- The good things
+-- The missing things
+-- The pitfalls
+
+* Pop quiz
+
+What does this do?
+
+.code test.go
+
+**
+
+- writes the byte 0x1 at offset 1
+- panics inside WriteAt()
+- nothing
+- other
+
+* How to prevent this?
+
+Throw errcheck at the code
+
+.link https://github.com/kisielk/errcheck
+
+
+      ~/Code/present-go-meetup $ cat badwrite.go
+      package main
+
+      import "os"
+
+      func main() {
+           file, err := os.Open("/tmp/afile.txt")
+           if err != nil {
+                panic(err)
+           }
+           file.WriteAt([]byte{0x1}, 1)
+      }
+      ~/Code/present-go-meetup $ errcheck badwrite.go
+      badwrite.go:10:14:	file.WriteAt([]byte{0x1}, 1)
+
+* Wiring it up
+
+       errcheck also recognizes the following command-line options:
+
+       The -tags flag takes a space-separated list of build tags, just like go build. [...]
+
+       The -asserts flag enables checking for ignored type assertion results. It takes no arguments.
+
+       The -blank flag enables checking for assignments of errors to the blank identifier. [...]
+
+
+.code Makefile
+
+* More linting
+
+Can never have enough linters
+
+Adding deadcode:
+
+.link https://github.com/remyoudompheng/go-misc/tree/master/deadcode
+
+.code Makefile2
+
+* Everything is O(n)
+
+- O(n) different configuration flags
+- O(n) steps
+- O(n) different error reporting styles
+- O(n) different tools people need to install locally
+
+* Making it O(1)
+
+Use a linter frontent
+
+.link https://github.com/alecthomas/gometalinter gometalinter [deprecated]
+
+.link https://github.com/golangci/golangci-lint golangci-lint [not so deprecated]
+
+* golangci-lint
+
+- Single config file in YAML
+- Runs all the linters in parallel
+- Shares loaded code between linters
+- Has features for adding new linters to established codebases
+
+* An example config
+
+.code config1.yaml
+
+* Introducing new linters to a codebase
+
+- Can't fix everything at once
+- Even if everything is fixed, regressions slip in
+- Add the linter with new: true
+- golangci-lint ignores errors in lines not touched by the commit
+- as old lines are touched, the errors are slowly and incrementally fixed
+- no new lines of code with errors allowed in
+
+* Introducing new linters to a codebase: not so easy
+
+- `new: true` can let everything in
+- If unstaged files exist during linting, golangci-lint only checks those 😱
+- Found out about this one week togo o late
+- new-from-rev:HEAD~1 more robust (if linting single commit)
+
+* new: true considered dangerous
+
+Uses a fork of [[https/github.com/golangci/revgrep][revgrep]] under the hook
+
+- non-local regressions bypass the heuristics
+- also affects new-from-rev
+
+From:
+
+    func bar() { foo() }
+
+    func foo() { // dostuff }
+
+To:
+
+    func bar() { foo() }
+
+    func foo() error { return fmt.Errorf("not supposed to be used anymore") }
+
+* new: true considered dangerous cont.
+
+- only use new as needed
+- agressively fix all errors for a linter and turn off new for it
+- new is global per run ([[golangci/golangci-lint/issues/212][GH-212]])
+- need one pass with linters that need --new, one without --new
+
+* more passes for fun and profit: deadcode
+
+- two passes for deadcode
+- one without linting tests, to prevent helpers for _test.go files in .go files
+- one with linting tests to find dead code in _test.go files
+- --tests=(true|false) is like new, global per run
+
+* 3 passes so far
+
+- --new --tests=true
+- --new:false --tests=true
+- --test=false --disable-all --enable=deadcode
+
+* golangci-lint is hungry for RAM
+
+- uses ~12Gb in our repo
+- golangci-lint --color=false to save about 500Mb
+- staticheck/gosimple are the biggest memory consumers
+-- both load the linted code in SSA format
+-- try to put them together in the same pass if possible
+-- staticheck has absorbed gosimple in newer upstream versions
+
+* The experience so far
+
+- Generally had a good experience with golangci-lint after ironing out some issues
+- Had to contribute upstream, either fixes or diagnosing local issues
+- Having some knowledge of how things are put together is almost essential
+- Being able to add more linters really help with finding, preventing and fixing bugs
+- Shoutout `ineffassign` and `errcheck`
+- Removing the multiple passes is work for the future
+
+* Alternative: staticcheck
+
+- A lot of our caught errors come from it
+- Pretty good to use on its own
+- We still like being able to add more linters on top

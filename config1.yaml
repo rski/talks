@@ -1,0 +1,13 @@
+issues:
+  # Ignore issues that existed before the commit being checked
+  new: true
+
+  exclude:
+    # errcheck ignore regex
+    # golangci-lint post-processes the output of the linter
+    - "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*printf?|os\\.(Un)?Setenv). is not checked"
+
+linters:
+  enable:
+    - errcheck
+    - deadcode
