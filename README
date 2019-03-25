@@ -1,0 +1,7 @@
+To view:
+
+
+$ go get -u golang.org/x/tools/cmd/present
+$ git clone <repo>
+$ cd repo
+$ present
