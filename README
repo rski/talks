@@ -1,7 +1,4 @@
-To view:
-
-
 $ go get -u golang.org/x/tools/cmd/present
 $ git clone <repo>
-$ cd repo
+$ cd <repo>/2019/arista-go-meetup-march
 $ present
